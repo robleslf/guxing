@@ -1,17 +1,15 @@
-&lt;p align="center"&gt;
-&lt;img src="img/guxing-letras.png" alt="Guxing Logo" width="320" /&gt;
-&lt;/p&gt;
+<div align="center">
 
-&lt;p align="center"&gt;
-&lt;strong&gt;Plataforma Inteligente de Traducción, Alineación y Lectura Bilingüe de Documentos&lt;/strong&gt;
-&lt;/p&gt;
+<img src="img/guxing-letras.png" alt="Guxing Logo" width="320" />
 
-&lt;p align="center"&gt;
-&lt;img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&amp;logo=python" alt="Python Version" /&gt;
-&lt;img src="https://img.shields.io/badge/PyMuPDF-PDF_Parsing-orange?style=flat-square" alt="PyMuPDF" /&gt;
-&lt;img src="https://img.shields.io/badge/AI_Engine-Gemini%20%7C%20DeepSeek%20%7C%20OpenAI-green?style=flat-square" alt="AI Engines" /&gt;
-&lt;img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square" alt="Platform" /&gt;
-&lt;/p&gt;
+### Plataforma Inteligente de Traducción, Alineación y Lectura Bilingüe de Documentos
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python)
+![PyMuPDF](https://img.shields.io/badge/PyMuPDF-PDF_Parsing-orange?style=flat-square)
+![AI Engines](https://img.shields.io/badge/AI_Engine-Gemini%20%7C%20DeepSeek%20%7C%20OpenAI-green?style=flat-square)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)
+
+</div>
 
 ---
 
