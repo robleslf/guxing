@@ -1,0 +1,11 @@
+Package: guxing
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: all
+Depends: python3, python3-venv, python3-pip, python3-tk
+Maintainer: Guxing <guxing@example.com>
+Description: Plataforma de traducción, alineación y lectura bilingüe de documentos
+ Guxing procesa documentos PDF, DOCX, ODT y TXT, los traduce con motores
+ de IA (Gemini, DeepSeek, OpenAI) reteniendo terminología técnica, y
+ genera un lector interactivo HTML bilingüe con sincronización de lectura.

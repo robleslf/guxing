@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec /opt/guxing/.venv/bin/python /opt/guxing/app.py "$@"

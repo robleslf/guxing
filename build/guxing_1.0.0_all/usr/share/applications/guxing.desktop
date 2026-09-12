@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Guxing
+Comment=Traductor y lector bilingüe de apuntes
+Exec=/opt/guxing/.venv/bin/python /opt/guxing/app.py
+Icon=guxing
+Terminal=false
+Type=Application
+Categories=Utility;Office;Education;
+StartupWMClass=guxing
