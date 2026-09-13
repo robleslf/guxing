@@ -13,6 +13,23 @@ from odf import opendocument
 from odf import text as odf_text
 from odf import teletype
 
+
+def _merge_broken_paragraphs(raw_list: list) -> list:
+    """Fusiona fragmentos partidos de un mismo párrafo antes de enviarlos a traducir."""
+    merged = []
+    for text in raw_list:
+        text = text.strip()
+        if not text:
+            continue
+        
+        # Si el bloque anterior no terminó en cierre de puntuación (. : ? !), se une con el actual
+        if merged and not re.search(r'[.:!?\n]\s*$', merged[-1]) and not text.startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.')):
+            merged[-1] = f"{merged[-1]} {text}"
+        else:
+            merged.append(text)
+    return merged
+
+
 def extract_text_from_file(file_path: str) -> list:
     ext = os.path.splitext(file_path)[1].lower()
     raw_blocks = []
@@ -60,7 +77,9 @@ def extract_text_from_file(file_path: str) -> list:
     else:
         raise ValueError(f"Formato no soportado: {ext}")
 
+    normalized_blocks = _merge_broken_paragraphs(raw_blocks)
+
     processed_blocks = []
-    for idx, text in enumerate(raw_blocks, start=1):
+    for idx, text in enumerate(normalized_blocks, start=1):
         processed_blocks.append({"id": f"b_{idx}", "text": text})
     return processed_blocks

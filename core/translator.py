@@ -3,110 +3,98 @@ import time
 from openai import OpenAI
 
 SYSTEM_PROMPT = """
-Eres un profesor de Informática y experto en maquetación interactiva para estudiantes chinos en universidades de España.
-Tu tarea es estructurar los apuntes en bloques y DIVIDIR CADA BLOQUE EN FRASES INDIVIDUALES alineadas (1 a 1) entre el original y la traducción.
+你是计算机科学专业教授，同时也是中西双语教学专家。
+你的任务是将西班牙大学的计算机专业课件/讲义（西班牙语/加利西亚语）整理、对齐并翻译为高水准的中文学术笔记，供中国留学生备考。
 
-REGLAS ESTRICTAS:
-1. SEPARAR TÍTULOS: Si un título viene pegado al inicio de un bloque (ej: "Historia de los SGBD Como se ha visto..."), crea un bloque de tipo "heading" solo para el título y otro de tipo "paragraph" para el resto.
-2. ALINEACIÓN FRASE A FRASE:
-   - Divide cada párrafo en su lista de frases ('sentences').
-   - Cada frase original debe emparejarse exactamente con su frase equivalente traducida.
-   - En títulos o código, la lista 'sentences' tendrá un único elemento.
-3. RETENCIÓN DE TÉRMINOS PARA EL EXAMEN:
-   - Todo concepto técnico, definición o acrónimo en español/gallego debe traducirse al chino colocando inmediatamente al lado el término original entre paréntesis.
-   - Ejemplo: 数据库系统 (sistemas de bases de datos)
-4. CÓDIGO INTACTO: Código y comandos se mantienen 100% idénticos.
+【核心翻译与排版准则】：
+1. 语言自然性与学术性（专业标准）：
+   - 采用中国计算机专业核心教材（如清华大学、电子工业出版社出版标准）的标准中文术语。
+   - 语句必须通顺、逻辑清晰易懂，严禁生硬机翻。如果原文句式复杂，可在保持原意的前提下重新组织中文语序。
 
-FORMATO JSON DE SALIDA OBLIGATORIO:
+2. 备考关键术语保留：
+   - 仅对【核心概念、考试技术术语、关键缩写、数据库/系统专有名词】在中文后保留原语标注，格式：中文术语 (Término en Español/Galego)。
+   - 常用词汇、日常动词、助词切勿过度加括号，以免影响阅读流畅度。
+   - 示例：CAP定理 (Teorema CAP)、一致性 (Consistencia)、物理磁盘文件 (ficheiros en disco físico)。
+
+3. 结构与对齐规范：
+   - 保持段落连贯，不要将一段完整的话生硬拆成琐碎的孤立单句。
+   - 'sentences' 数组中的每一项必须是一句完整的语义句，且 'orig' 与 'trans' 必须严格 1 对 1 对应。
+   - 代码块、SQL、命令行及系统路径必须 100% 保持原样输出，不翻译。
+
+【严格的 JSON 输出结构】：
 {
   "blocks": [
     {
       "id": "b_1",
       "type": "heading" | "paragraph" | "code",
       "sentences": [
-        {"sid": "s_1_1", "orig": "Frase 1 original.", "trans": "Frase 1 traducida con términos (Original)."}
+        {
+          "sid": "s_1_1",
+          "orig": "Texto original en español o galego.",
+          "trans": "翻译为自然流畅的中文学术内容，重点概念标注 (Término Original)。"
+        }
       ],
-      "key_terms": [{"original": "Término ES/GL", "chinese": "Término Chino"}]
+      "key_terms": [
+        {"original": "Término en examen", "chinese": "中文标准术语"}
+      ]
     }
   ]
 }
 """
 
-# Fragmentos de mensajes de error que indican que una clave está agotada,
-# es inválida o no tiene permiso -- no merece la pena reintentar con ella,
-# lo suyo es pasar directamente a la siguiente cuenta configurada.
 _KEY_EXHAUSTED_MARKERS = (
-    "429",
-    "resource_exhausted",
-    "insufficient_quota",
-    "quota",
-    "rate limit",
-    "rate_limit",
-    "401",
-    "invalid_api_key",
-    "incorrect api key",
-    "authentication",
-    "permission_denied",
-    "403",
+    "429", "resource_exhausted", "insufficient_quota", "quota",
+    "rate limit", "rate_limit", "401", "invalid_api_key",
+    "incorrect api key", "authentication", "permission_denied", "403",
 )
-
 
 def _looks_like_key_exhausted(error_str: str) -> bool:
     lowered = error_str.lower()
     return any(marker in lowered for marker in _KEY_EXHAUSTED_MARKERS)
 
-
-def test_api_key(client, model, timeout=None):
-    """
-    Comprobación mínima y barata de que una cuenta/API key funciona de
-    verdad para traducir: manda un mensaje muy corto y pide como máximo
-    1 token de respuesta, usando el mismo endpoint (chat.completions) que
-    se usará durante la traducción real, para que el resultado sea fiable.
-
-    Si la cuenta está agotada o es inválida, el proveedor la rechaza antes
-    de generar nada, así que el coste real en tokens es prácticamente cero
-    en el peor caso, y mínimo (unos pocos tokens) si la cuenta sí funciona.
-
-    Devuelve (ok: bool, mensaje: str).
-    """
+def test_api_key(client, model: str, timeout: float = 15.0) -> tuple:
     try:
-        client.chat.completions.create(
+        kwargs = dict(
             model=model,
-            messages=[{"role": "user", "content": "hola"}],
+            messages=[{"role": "user", "content": "ping"}],
             max_tokens=1,
         )
+        try:
+            client.chat.completions.create(timeout=timeout, **kwargs)
+        except TypeError:
+            client.chat.completions.create(**kwargs)
         return True, "OK"
     except Exception as e:
-        return False, str(e)
+        err_str = str(e)
+        if _looks_like_key_exhausted(err_str):
+            return False, f"Sin cuota o credenciales inválidas ({err_str[:100]})"
+        return False, f"Error de conexión ({err_str[:100]})"
 
+def check_client_pool(client_pool, status_callback=None) -> dict:
+    results = {}
+    for profile in client_pool:
+        name = profile["name"]
+        if status_callback:
+            status_callback(f"Comprobando cuenta '{name}'...")
+        ok, msg = test_api_key(profile["client"], profile["model"])
+        results[name] = (ok, msg)
+        if status_callback:
+            icon = "✔" if ok else "✘"
+            status_callback(f"{icon} '{name}': {msg}")
+    return results
 
 def translate_blocks_batch(client_pool, blocks_batch, status_callback=None,
-                            max_retries_per_key=2, dead_keys=None):
-    """
-    Traduce un lote de bloques probando, en orden, cada perfil/cuenta del
-    pool. Si una cuenta falla (cuota agotada, clave inválida, error de red
-    persistente...) se descarta para el resto del proceso y se continúa
-    automáticamente con la siguiente, hasta que una funcione o se agoten
-    todas.
-
-    client_pool: lista de dicts {"name": str, "client": OpenAI, "model": str}
-                 (normalmente una entrada por cada perfil con API key
-                 configurado en Guxing, empezando por el perfil activo).
-    dead_keys:   set() compartido entre lotes para no volver a probar una
-                 cuenta que ya se sabe agotada/rota en este mismo proceso.
-    """
+                           max_retries_per_key=2, dead_keys=None):
     if dead_keys is None:
         dead_keys = set()
 
     prompt = f"Analiza, separa frases y traduce estos bloques:\n\n{json.dumps(blocks_batch, ensure_ascii=False)}"
-
     last_error = None
 
     for profile in client_pool:
         name = profile["name"]
         if name in dead_keys:
             continue
-
         client = profile["client"]
         model = profile["model"]
 
@@ -119,87 +107,28 @@ def translate_blocks_batch(client_pool, blocks_batch, status_callback=None,
                         {"role": "user", "content": prompt}
                     ],
                     response_format={"type": "json_object"},
-                    temperature=0.1
+                    temperature=0.2
                 )
                 result = json.loads(response.choices[0].message.content)
                 return result.get("blocks", [])
-
             except Exception as e:
                 err_str = str(e)
                 last_error = e
 
                 if _looks_like_key_exhausted(err_str):
-                    # No merece la pena reintentar con esta cuenta: se marca
-                    # como agotada y se pasa a la siguiente inmediatamente.
                     dead_keys.add(name)
                     if status_callback:
-                        status_callback(f"⚠ Cuenta '{name}' sin cuota o sin acceso. Probando con la siguiente cuenta...")
+                        status_callback(f"■ Cuenta '{name}' sin cuota o sin acceso. Probando siguiente...")
                     break
 
-                # Error probablemente transitorio (red, servidor caído, etc.):
-                # un par de reintentos cortos antes de dar por perdida esta cuenta.
                 if attempt < max_retries_per_key - 1:
-                    wait_time = 5 * (attempt + 1)
+                    wait_time = 4 * (attempt + 1)
                     if status_callback:
-                        status_callback(f"Fallo temporal en '{name}': {err_str[:100]}. Reintentando en {wait_time}s...")
+                        status_callback(f"Fallo temporal en '{name}': {err_str[:80]}. Reintentando...")
                     time.sleep(wait_time)
                 else:
                     dead_keys.add(name)
                     if status_callback:
-                        status_callback(f"⚠ '{name}' no responde tras varios intentos. Probando con la siguiente cuenta...")
+                        status_callback(f"■ '{name}' no responde. Probando siguiente...")
 
-    # Si llegamos aquí, ninguna cuenta del pool ha podido traducir este lote
-    raise RuntimeError(
-        "Se agotaron todas las cuentas/API keys configuradas sin poder traducir este bloque. "
-        f"Último error: {last_error}"
-    )
-
-
-def test_api_key(client, model: str, timeout: float = 15.0) -> tuple:
-    """
-    Comprueba si una cuenta/API key concreta funciona, con el mínimo gasto
-    posible: una única petición de chat con un mensaje casi vacío y
-    max_tokens=1. Usa el mismo camino (chat.completions) que la traducción
-    real, así que si esto funciona, la traducción también podrá arrancar
-    con esta cuenta.
-
-    Devuelve (ok: bool, mensaje: str).
-    """
-    try:
-        kwargs = dict(
-            model=model,
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-        )
-        try:
-            client.chat.completions.create(timeout=timeout, **kwargs)
-        except TypeError:
-            # Alguna versión del cliente no acepta 'timeout' en este método
-            client.chat.completions.create(**kwargs)
-        return True, "OK"
-    except Exception as e:
-        err_str = str(e)
-        if _looks_like_key_exhausted(err_str):
-            return False, f"Sin cuota o credenciales inválidas ({err_str[:100]})"
-        return False, f"Error de conexión ({err_str[:100]})"
-
-
-def check_client_pool(client_pool, status_callback=None) -> dict:
-    """
-    Comprueba, una por una, todas las cuentas de client_pool. Llama a
-    status_callback (si se proporciona) con mensajes de progreso legibles,
-    útiles para mostrar en la interfaz mientras se ejecuta.
-
-    Devuelve un dict {nombre_cuenta: (ok: bool, mensaje: str)}.
-    """
-    results = {}
-    for profile in client_pool:
-        name = profile["name"]
-        if status_callback:
-            status_callback(f"Comprobando cuenta '{name}'...")
-        ok, msg = test_api_key(profile["client"], profile["model"])
-        results[name] = (ok, msg)
-        if status_callback:
-            icon = "✔" if ok else "✘"
-            status_callback(f"{icon} '{name}': {msg}")
-    return results
+    raise RuntimeError(f"Se agotaron todas las cuentas/APIs configuradas. Último error: {last_error}")
