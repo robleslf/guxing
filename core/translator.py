@@ -56,6 +56,30 @@ def _looks_like_key_exhausted(error_str: str) -> bool:
     return any(marker in lowered for marker in _KEY_EXHAUSTED_MARKERS)
 
 
+def test_api_key(client, model, timeout=None):
+    """
+    Comprobación mínima y barata de que una cuenta/API key funciona de
+    verdad para traducir: manda un mensaje muy corto y pide como máximo
+    1 token de respuesta, usando el mismo endpoint (chat.completions) que
+    se usará durante la traducción real, para que el resultado sea fiable.
+
+    Si la cuenta está agotada o es inválida, el proveedor la rechaza antes
+    de generar nada, así que el coste real en tokens es prácticamente cero
+    en el peor caso, y mínimo (unos pocos tokens) si la cuenta sí funciona.
+
+    Devuelve (ok: bool, mensaje: str).
+    """
+    try:
+        client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": "hola"}],
+            max_tokens=1,
+        )
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
 def translate_blocks_batch(client_pool, blocks_batch, status_callback=None,
                             max_retries_per_key=2, dead_keys=None):
     """
@@ -129,3 +153,53 @@ def translate_blocks_batch(client_pool, blocks_batch, status_callback=None,
         "Se agotaron todas las cuentas/API keys configuradas sin poder traducir este bloque. "
         f"Último error: {last_error}"
     )
+
+
+def test_api_key(client, model: str, timeout: float = 15.0) -> tuple:
+    """
+    Comprueba si una cuenta/API key concreta funciona, con el mínimo gasto
+    posible: una única petición de chat con un mensaje casi vacío y
+    max_tokens=1. Usa el mismo camino (chat.completions) que la traducción
+    real, así que si esto funciona, la traducción también podrá arrancar
+    con esta cuenta.
+
+    Devuelve (ok: bool, mensaje: str).
+    """
+    try:
+        kwargs = dict(
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
+        try:
+            client.chat.completions.create(timeout=timeout, **kwargs)
+        except TypeError:
+            # Alguna versión del cliente no acepta 'timeout' en este método
+            client.chat.completions.create(**kwargs)
+        return True, "OK"
+    except Exception as e:
+        err_str = str(e)
+        if _looks_like_key_exhausted(err_str):
+            return False, f"Sin cuota o credenciales inválidas ({err_str[:100]})"
+        return False, f"Error de conexión ({err_str[:100]})"
+
+
+def check_client_pool(client_pool, status_callback=None) -> dict:
+    """
+    Comprueba, una por una, todas las cuentas de client_pool. Llama a
+    status_callback (si se proporciona) con mensajes de progreso legibles,
+    útiles para mostrar en la interfaz mientras se ejecuta.
+
+    Devuelve un dict {nombre_cuenta: (ok: bool, mensaje: str)}.
+    """
+    results = {}
+    for profile in client_pool:
+        name = profile["name"]
+        if status_callback:
+            status_callback(f"Comprobando cuenta '{name}'...")
+        ok, msg = test_api_key(profile["client"], profile["model"])
+        results[name] = (ok, msg)
+        if status_callback:
+            icon = "✔" if ok else "✘"
+            status_callback(f"{icon} '{name}': {msg}")
+    return results
